@@ -100,20 +100,55 @@ local function toggleMenu()
     menuFrame:FindFirstChild("Panel").Visible = menuVisible
 end
 
+-- Função para teleportar para posição válida
+local function teleportToValidPosition(position)
+    if not player or not player.Character then return end
+    
+    local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
+    if not root then return end
+    
+    -- Raycast para encontrar o chão
+    local ray = Ray.new(position, Vector3.new(0, -100, 0))
+    local hit, pos = workspace:FindPartOnRay(ray, player.Character)
+    
+    if hit then
+        -- Verifica se o ponto está acima do chão
+        if pos.Y > position.Y then
+            pos = Vector3.new(pos.X, position.Y + 10, pos.Z)
+        end
+        
+        root.CFrame = CFrame.new(pos)
+        print("Teleportado para posição válida:", pos)
+    else
+        -- Se não encontrou chão, tenta encontrar um bloco próximo
+        local searchRadius = 50
+        for x = -searchRadius, searchRadius, 10 do
+            for z = -searchRadius, searchRadius, 10 do
+                local testPos = Vector3.new(position.X + x, position.Y, position.Z + z)
+                local rayTest = Ray.new(testPos, Vector3.new(0, -100, 0))
+                local hitTest, posTest = workspace:FindPartOnRay(rayTest, player.Character)
+                
+                if hitTest then
+                    pos = Vector3.new(posTest.X, position.Y + 10, posTest.Z)
+                    root.CFrame = CFrame.new(pos)
+                    print("Teleportado para posição válida:", pos)
+                    return
+                end
+            end
+        end
+        
+        -- Se não encontrou nada, usa posição original com Y+10
+        pos = Vector3.new(position.X, position.Y + 10, position.Z)
+        root.CFrame = CFrame.new(pos)
+        print("Teleportado para posição original com ajuste:", pos)
+    end
+end
+
 -- Evento de clique do mouse para teleportação
 mouse.Button1Down:Connect(function()
     if menuVisible then
         -- Teleporta para o local mais próximo do cursor
-        local ray = Ray.new(mouse.Hit.Position, Vector3.new(0, -100, 0))
-        local hit, pos = workspace:FindPartOnRay(ray, player.Character)
-        
-        if hit and player.Character then
-            local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
-            if root then
-                root.CFrame = CFrame.new(pos)
-                print("Teleportado para posição do mouse")
-            end
-        end
+        teleportToValidPosition(mouse.Hit.Position)
     end
 end)
 
