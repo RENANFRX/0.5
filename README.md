@@ -1,9 +1,16 @@
--- Snipers Arena Menu System
+-- Enhanced Sniper Arena Menu System
+-- Features: Character selection, weapon customization, game settings, aimbot toggle
 -- Author: DeepHat
 -- Date: 2023-09-15
 
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
+local DataStoreService = game:GetService("DataStoreService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Aimbot functionality
+local aimbotEnabled = false
+local aimbotPart = nil
 
 -- Create main menu frame
 local mainMenu = Instance.new("ScreenGui")
@@ -56,6 +63,15 @@ settingsFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
 settingsFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 settingsFrame.BorderSizePixel = 0
 settingsFrame.Parent = background
+
+-- Aimbot toggle frame
+local aimbotFrame = Instance.new("Frame")
+aimbotFrame.Visible = false
+aimbotFrame.Size = UDim2.new(0, 700, 0, 400)
+aimbotFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
+aimbotFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+aimbotFrame.BorderSizePixel = 0
+aimbotFrame.Parent = background
 
 -- Character buttons (example)
 local charButtons = {}
@@ -116,10 +132,69 @@ diffSlider.Position = UDim2.new(0.5, 0, 0.2, 0)
 diffSlider.Value = 50
 diffSlider.Parent = settingsFrame
 
+-- Crosshair settings
+local crosshairLabel = Instance.new("TextLabel")
+crosshairLabel.Text = "Crosshair:"
+crosshairLabel.Size = UDim2.new(0, 150, 0, 30)
+crosshairLabel.Position = UDim2.new(0.2, 0, 0.4, 0)
+crosshairLabel.Font = Enum.Font.SourceSansBold
+crosshairLabel.TextSize = 20
+crosshairLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+crosshairLabel.Parent = settingsFrame
+
+local crosshairColors = {
+    {Color3.fromRGB(255, 255, 255), "White"},
+    {Color3.fromRGB(255, 0, 0), "Red"},
+    {Color3.fromRGB(0, 255, 0), "Green"},
+    {Color3.fromRGB(0, 0, 255), "Blue"}
+}
+
+local crosshairButtons = {}
+for i, color in ipairs(crosshairColors) do
+    local button = Instance.new("TextButton")
+    button.Text = color[2]
+    button.Size = UDim2.new(0, 100, 0, 30)
+    button.Position = UDim2.new(0, (i-1)*110, 0.5, 0)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 16
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundColor3 = color[1]
+    button.MouseButton1Click:Connect(function()
+        print("Selected crosshair color:", color[2])
+        -- Apply crosshair color
+    end)
+    button.Parent = settingsFrame
+    table.insert(crosshairButtons, button)
+end
+
+-- Aimbot toggle
+local aimbotToggle = Instance.new("TextButton")
+aimbotToggle.Text = "AIMBOT: OFF"
+aimbotToggle.Size = UDim2.new(0, 150, 0, 50)
+aimbotToggle.Position = UDim2.new(0.5, -75, 0.6, 0)
+aimbotToggle.Font = Enum.Font.SourceSansBold
+aimbotToggle.TextSize = 24
+aimbotToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimbotToggle.BackgroundColor3 = Color3.fromRGB(100, 0, 0)
+aimbotToggle.MouseButton1Click:Connect(function()
+    aimbotEnabled = not aimbotEnabled
+    aimbotToggle.Text = "AIMBOT: " .. (aimbotEnabled and "ON" or "OFF")
+    aimbotToggle.BackgroundColor3 = aimbotEnabled and Color3.fromRGB(0, 100, 0) or Color3.fromRGB(100, 0, 0)
+    
+    -- Initialize aimbot if enabled
+    if aimbotEnabled then
+        initAimbot()
+    else
+        destroyAimbot()
+    end
+end)
+aimbotToggle.Parent = settingsFrame
+
+-- Start game button
 local startBtn = Instance.new("TextButton")
 startBtn.Text = "START GAME"
 startBtn.Size = UDim2.new(0, 200, 0, 50)
-startBtn.Position = UDim2.new(0.5, -100, 0.7, 0)
+startBtn.Position = UDim2.new(0.5, -100, 0.8, 0)
 startBtn.Font = Enum.Font.SourceSansBold
 startBtn.TextSize = 24
 startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -135,7 +210,7 @@ startBtn.Parent = settingsFrame
 
 -- Back buttons
 local backBtns = {}
-for _, frame in ipairs({charSelectFrame, weaponSelectFrame, settingsFrame}) do
+for _, frame in ipairs({charSelectFrame, weaponSelectFrame, settingsFrame, aimbotFrame}) do
     local btn = Instance.new("TextButton")
     btn.Text = "BACK"
     btn.Size = UDim2.new(0, 100, 0, 40)
@@ -154,17 +229,107 @@ for _, frame in ipairs({charSelectFrame, weaponSelectFrame, settingsFrame}) do
         elseif frame == settingsFrame then
             weaponSelectFrame.Visible = true
             settingsFrame.Visible = false
+        elseif frame == aimbotFrame then
+            settingsFrame.Visible = true
+            aimbotFrame.Visible = false
         end
     end)
     btn.Parent = frame
     table.insert(backBtns, btn)
 end
 
+-- Aimbot initialization function
+function initAimbot()
+    -- Find player's camera
+    local player = game.Players.LocalPlayer
+    local character = player.Character or player.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChild("Humanoid") or character:WaitForChild("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart")
+    local camera = workspace.CurrentCamera
+    
+    -- Find closest enemy
+    local closestEnemy = nil
+    local minDistance = math.huge
+    
+    for _, player in pairs(game.Players:GetPlayers()) do
+        if player ~= player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (player.Character.HumanoidRootPart.Position - root.Position).magnitude
+            if distance < minDistance then
+                minDistance = distance
+                closestEnemy = player
+            end
+        end
+    end
+    
+    -- Create aimbot part
+    if closestEnemy and closestEnemy.Character then
+        aimbotPart = Instance.new("Part")
+        aimbotPart.Size = Vector3.new(0.1, 0.1, 0.1)
+        aimbotPart.Anchored = true
+        aimbotPart.CanCollide = false
+        aimbotPart.Material = Enum.Material.Neon
+        aimbotPart.BrickColor = BrickColor.new("Bright red")
+        aimbotPart.Name = "AimbotTarget"
+        
+        -- Connect to humanoid health changes to track enemy health
+        local enemyHumanoid = closestEnemy.Character:FindFirstChild("Humanoid")
+        if enemyHumanoid then
+            enemyHumanoid.HealthChanged:Connect(function(newHealth)
+                if newHealth <= 0 then
+                    destroyAimbot()
+                end
+            end)
+        end
+    end
+end
+
+-- Destroy aimbot function
+function destroyAimbot()
+    if aimbotPart then
+        aimbotPart:Destroy()
+        aimbotPart = nil
+    end
+end
+
+-- Aimbot update loop
+game:GetService("RunService").Heartbeat:Connect(function()
+    if aimbotEnabled and aimbotPart then
+        -- Find player's camera
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local root = character:FindFirstChild("HumanoidRootPart") or character:WaitForChild("HumanoidRootPart")
+        local camera = workspace.CurrentCamera
+        
+        -- Update aimbot target position
+        local closestEnemy = nil
+        local minDistance = math.huge
+        
+        for _, player in pairs(game.Players:GetPlayers()) do
+            if player ~= player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local distance = (player.Character.HumanoidRootPart.Position - root.Position).magnitude
+                if distance < minDistance then
+                    minDistance = distance
+                    closestEnemy = player
+                end
+            end
+        end
+        
+        -- Move aimbot part to enemy head
+        if closestEnemy and closestEnemy.Character then
+            local enemyHead = closestEnemy.Character:FindFirstChild("Head")
+            if enemyHead then
+                aimbotPart.CFrame = CFrame.lookAt(root.Position, enemyHead.Position + Vector3.new(0, 1, 0))
+            end
+        end
+    end
+end)
+
 -- Initial visibility
 background.Visible = true
 charSelectFrame.Visible = false
 weaponSelectFrame.Visible = false
 settingsFrame.Visible = false
+aimbotFrame.Visible = false
 
 -- Add a way to open the menu from the game world
 game.Players.PlayerAdded:Connect(function(player)
@@ -190,4 +355,4 @@ game.Players.PlayerAdded:Connect(function(player)
     end)
 end)
 
-print("Sniper Arena menu loaded successfully!")
+print("Enhanced Sniper Arena menu loaded successfully!")
