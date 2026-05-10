@@ -1,11 +1,20 @@
--- Teleportação com menu interativo no Roblox
+-- Teleportação complexa com menu interativo no Roblox
 local player = game.Players.LocalPlayer
 local mouse = player:GetMouse()
+local runService = game:GetService("RunService")
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local playerGui = player:WaitForChild("PlayerGui")
 
 -- Configurações do menu
 local menuVisible = false
 local menuFrame = nil
-local maxDistance = 1000 -- Distância máxima permitida do mapa
+local maxDistance = 1000 -- Distância máxima do mapa
+local teleportCooldown = 1 -- Segundos entre teletransportações
+local lastTeleportTime = 0
+
+-- Sistema de cache de locais
+local locationCache = {}
+local locationHistory = {}
 
 -- Função para criar o menu
 local function createMenu()
@@ -14,13 +23,13 @@ local function createMenu()
     menuFrame = Instance.new("ScreenGui")
     menuFrame.Name = "TeleportMenu"
     menuFrame.ResetOnSpawn = false
-    menuFrame.Parent = player:WaitForChild("PlayerGui")
+    menuFrame.Parent = playerGui
     
-    -- Painel
+    -- Painel principal
     local panel = Instance.new("Frame")
     panel.Name = "Panel"
-    panel.Size = UDim2.new(0, 200, 0, 180)
-    panel.Position = UDim2.new(0.5, -100, 0.5, -90)
+    panel.Size = UDim2.new(0, 250, 0, 250)
+    panel.Position = UDim2.new(0.5, -125, 0.5, -125)
     panel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     panel.BorderSizePixel = 2
     panel.BorderColor3 = Color3.fromRGB(80, 80, 80)
@@ -29,7 +38,7 @@ local function createMenu()
     
     -- Título
     local title = Instance.new("TextLabel")
-    title.Text = "Teleportação"
+    title.Text = "Teleportação Avançada"
     title.Size = UDim2.new(1, 0, 0, 30)
     title.BackgroundTransparency = 1
     title.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -39,47 +48,53 @@ local function createMenu()
     
     -- Botões de localização
     local locations = {
-        {"Local A", Vector3.new(100, 50, 200)},
-        {"Local B", Vector3.new(-100, 75, -150)},
-        {"Local C", Vector3.new(300, 100, 400)}
+        {"Base A", Vector3.new(100, 50, 200)},
+        {"Base B", Vector3.new(-100, 75, -150)},
+        {"Base C", Vector3.new(300, 100, 400)},
+        {"Safe Zone", Vector3.new(0, 100, 0)},
+        {"Tower Top", Vector3.new(500, 200, 500)}
     }
     
     for i, loc in ipairs(locations) do
         local btn = Instance.new("TextButton")
         btn.Text = loc[1]
         btn.Size = UDim2.new(0, 150, 0, 30)
-        btn.Position = UDim2.new(0, 25, 0, 50 + (i*35))
+        btn.Position = UDim2.new(0, 50, 0, 50 + (i*35))
         btn.BackgroundTransparency = 0.3
         btn.TextColor3 = Color3.fromRGB(150, 255, 150)
         btn.MouseButton1Click:Connect(function()
-            if player and player.Character then
-                local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
-                if root then
-                    root.CFrame = CFrame.new(loc[2])
-                    print("Teleportado para:", loc[1])
-                end
-            end
+            teleportToLocation(loc[2], loc[1])
         end)
         btn.Parent = panel
     end
     
     -- Botões de controle
-    local minBtn = Instance.new("TextButton")
-    minBtn.Text = "Minimizar"
-    minBtn.Size = UDim2.new(0, 80, 0, 25)
-    minBtn.Position = UDim2.new(0, 10, 0, 145)
-    minBtn.BackgroundTransparency = 0.4
-    minBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    minBtn.MouseButton1Click:Connect(function()
-        menuVisible = false
-        panel.Visible = false
+    local historyBtn = Instance.new("TextButton")
+    historyBtn.Text = "Histórico"
+    historyBtn.Size = UDim2.new(0, 80, 0, 25)
+    historyBtn.Position = UDim2.new(0, 10, 0, 210)
+    historyBtn.BackgroundTransparency = 0.4
+    historyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    historyBtn.MouseButton1Click:Connect(function()
+        showHistory()
     end)
-    minBtn.Parent = panel
+    historyBtn.Parent = panel
+    
+    local clearBtn = Instance.new("TextButton")
+    clearBtn.Text = "Limpar"
+    clearBtn.Size = UDim2.new(0, 80, 0, 25)
+    clearBtn.Position = UDim2.new(0, 95, 0, 210)
+    clearBtn.BackgroundTransparency = 0.4
+    clearBtn.TextColor3 = Color3.fromRGB(200, 150, 100)
+    clearBtn.MouseButton1Click:Connect(function()
+        clearHistory()
+    end)
+    clearBtn.Parent = panel
     
     local closeBtn = Instance.new("TextButton")
     closeBtn.Text = "Fechar"
     closeBtn.Size = UDim2.new(0, 80, 0, 25)
-    closeBtn.Position = UDim2.new(0, 110, 0, 145)
+    closeBtn.Position = UDim2.new(0, 180, 0, 210)
     closeBtn.BackgroundTransparency = 0.4
     closeBtn.TextColor3 = Color3.fromRGB(200, 100, 100)
     closeBtn.MouseButton1Click:Connect(function()
@@ -91,36 +106,26 @@ local function createMenu()
     return panel
 end
 
--- Função para alternar o menu
-local function toggleMenu()
-    if not menuFrame then
-        createMenu()
+-- Função para teleportar para local
+local function teleportToLocation(position, name)
+    local currentTime = tick()
+    if currentTime - lastTeleportTime < teleportCooldown then
+        print("Aguarde " .. math.ceil(teleportCooldown - (currentTime - lastTeleportTime)) .. " segundos")
+        return
     end
     
-    menuVisible = not menuVisible
-    menuFrame:FindFirstChild("Panel").Visible = menuVisible
-end
-
--- Função para verificar se a posição está dentro do mapa
-local function isValidPosition(position)
-    -- Verifica distância do centro do mapa
-    local center = Vector3.new(0, 0, 0)
-    local distance = (position - center).Magnitude
-    
-    return distance <= maxDistance
-end
-
--- Função para teleportar para posição válida
-local function teleportToValidPosition(position)
     if not player or not player.Character then return end
     
     local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
     if not root then return end
     
     -- Verifica se a posição está dentro do mapa
-    if not isValidPosition(position) then
+    local center = Vector3.new(0, 0, 0)
+    local distance = (position - center).Magnitude
+    
+    if distance > maxDistance then
         print("Posição fora do mapa! Teleportando para posição segura.")
-        position = Vector3.new(0, 100, 0) -- Posição segura padrão
+        position = Vector3.new(0, 100, 0)
     end
     
     -- Raycast para encontrar o chão
@@ -134,7 +139,9 @@ local function teleportToValidPosition(position)
         end
         
         root.CFrame = CFrame.new(pos)
-        print("Teleportado para posição válida:", pos)
+        lastTeleportTime = currentTime
+        addToHistory(name, pos)
+        print("Teleportado para:", name)
     else
         -- Se não encontrou chão, tenta encontrar um bloco próximo
         local searchRadius = 50
@@ -147,7 +154,9 @@ local function teleportToValidPosition(position)
                 if hitTest then
                     pos = Vector3.new(posTest.X, position.Y + 10, posTest.Z)
                     root.CFrame = CFrame.new(pos)
-                    print("Teleportado para posição válida:", pos)
+                    lastTeleportTime = currentTime
+                    addToHistory(name, pos)
+                    print("Teleportado para:", name)
                     return
                 end
             end
@@ -156,17 +165,49 @@ local function teleportToValidPosition(position)
         -- Se não encontrou nada, usa posição original com Y+10
         pos = Vector3.new(position.X, position.Y + 10, position.Z)
         root.CFrame = CFrame.new(pos)
-        print("Teleportado para posição original com ajuste:", pos)
+        lastTeleportTime = currentTime
+        addToHistory(name, pos)
+        print("Teleportado para posição original com ajuste:", name)
     end
 end
 
--- Evento de clique do mouse para teleportação
-mouse.Button1Down:Connect(function()
-    if menuVisible then
-        -- Teleporta para o local mais próximo do cursor
-        teleportToValidPosition(mouse.Hit.Position)
+-- Função para adicionar ao histórico
+local function addToHistory(name, position)
+    table.insert(locationHistory, 1, {name = name, position = position})
+    if #locationHistory > 10 then
+        table.remove(locationHistory, #locationHistory)
     end
-end)
+end
+
+-- Função para mostrar histórico
+local function showHistory()
+    if #locationHistory == 0 then
+        print("Histórico vazio")
+        return
+    end
+    
+    print("\n=== Histórico de Teleportações ===")
+    for i, entry in ipairs(locationHistory) do
+        print(i .. ". " .. entry.name .. " (" .. tostring(entry.position) .. ")")
+    end
+    print("=============================\n")
+end
+
+-- Função para limpar histórico
+local function clearHistory()
+    locationHistory = {}
+    print("Histórico limpo")
+end
+
+-- Função para alternar o menu
+local function toggleMenu()
+    if not menuFrame then
+        createMenu()
+    end
+    
+    menuVisible = not menuVisible
+    menuFrame:FindFirstChild("Panel").Visible = menuVisible
+end
 
 -- Evento de tecla para alternar menu
 mouse.KeyDown:Connect(function(key)
@@ -175,4 +216,4 @@ mouse.KeyDown:Connect(function(key)
     end
 end)
 
-print("Menu de teletransporte carregado - Clique com o botão esquerdo para teleportar ou pressione 'M' para abrir menu")
+print("Menu de teletransporte carregado - Pressione 'M' para abrir menu")
