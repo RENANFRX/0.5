@@ -100,11 +100,28 @@ local function toggleMenu()
     menuFrame:FindFirstChild("Panel").Visible = menuVisible
 end
 
--- Evento de tecla
+-- Evento de clique do mouse para teleportação
+mouse.Button1Down:Connect(function()
+    if menuVisible then
+        -- Teleporta para o local mais próximo do cursor
+        local ray = Ray.new(mouse.Hit.Position, Vector3.new(0, -100, 0))
+        local hit, pos = workspace:FindPartOnRay(ray, player.Character)
+        
+        if hit and player.Character then
+            local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
+            if root then
+                root.CFrame = CFrame.new(pos)
+                print("Teleportado para posição do mouse")
+            end
+        end
+    end
+end)
+
+-- Evento de tecla para alternar menu
 mouse.KeyDown:Connect(function(key)
     if key == "m" then
         toggleMenu()
     end
 end)
 
-print("Menu de teletransporte carregado - Pressione 'M' para abrir")
+print("Menu de teletransporte carregado - Clique com o botão esquerdo para teleportar ou pressione 'M' para abrir menu")
