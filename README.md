@@ -1,219 +1,193 @@
--- Teleportação complexa com menu interativo no Roblox
-local player = game.Players.LocalPlayer
-local mouse = player:GetMouse()
-local runService = game:GetService("RunService")
-local replicatedStorage = game:GetService("ReplicatedStorage")
-local playerGui = player:WaitForChild("PlayerGui")
+-- Snipers Arena Menu System
+-- Author: DeepHat
+-- Date: 2023-09-15
 
--- Configurações do menu
-local menuVisible = false
-local menuFrame = nil
-local maxDistance = 1000 -- Distância máxima do mapa
-local teleportCooldown = 1 -- Segundos entre teletransportações
-local lastTeleportTime = 0
+local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 
--- Sistema de cache de locais
-local locationCache = {}
-local locationHistory = {}
+-- Create main menu frame
+local mainMenu = Instance.new("ScreenGui")
+mainMenu.Name = "MainMenu"
+mainMenu.Parent = StarterGui
 
--- Função para criar o menu
-local function createMenu()
-    if menuFrame then return end
-    
-    menuFrame = Instance.new("ScreenGui")
-    menuFrame.Name = "TeleportMenu"
-    menuFrame.ResetOnSpawn = false
-    menuFrame.Parent = playerGui
-    
-    -- Painel principal
-    local panel = Instance.new("Frame")
-    panel.Name = "Panel"
-    panel.Size = UDim2.new(0, 250, 0, 250)
-    panel.Position = UDim2.new(0.5, -125, 0.5, -125)
-    panel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    panel.BorderSizePixel = 2
-    panel.BorderColor3 = Color3.fromRGB(80, 80, 80)
-    panel.Visible = false
-    panel.Parent = menuFrame
-    
-    -- Título
-    local title = Instance.new("TextLabel")
-    title.Text = "Teleportação Avançada"
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.fromRGB(200, 200, 200)
-    title.FontSize = Enum.FontSize.Size18
-    title.TextScaled = true
-    title.Parent = panel
-    
-    -- Botões de localização
-    local locations = {
-        {"Base A", Vector3.new(100, 50, 200)},
-        {"Base B", Vector3.new(-100, 75, -150)},
-        {"Base C", Vector3.new(300, 100, 400)},
-        {"Safe Zone", Vector3.new(0, 100, 0)},
-        {"Tower Top", Vector3.new(500, 200, 500)}
-    }
-    
-    for i, loc in ipairs(locations) do
-        local btn = Instance.new("TextButton")
-        btn.Text = loc[1]
-        btn.Size = UDim2.new(0, 150, 0, 30)
-        btn.Position = UDim2.new(0, 50, 0, 50 + (i*35))
-        btn.BackgroundTransparency = 0.3
-        btn.TextColor3 = Color3.fromRGB(150, 255, 150)
-        btn.MouseButton1Click:Connect(function()
-            teleportToLocation(loc[2], loc[1])
+-- Main menu background
+local background = Instance.new("Frame")
+background.Size = UDim2.new(0, 800, 0, 600)
+background.Position = UDim2.new(0.5, -400, 0.5, -300)
+background.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+background.BorderSizePixel = 0
+background.Parent = mainMenu
+
+-- Title label
+local title = Instance.new("TextLabel")
+title.Text = "SNIPER ARENA"
+title.Size = UDim2.new(0, 600, 0, 50)
+title.Position = UDim2.new(0.5, -300, 0.1, 0)
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 36
+title.TextColor3 = Color3.fromRGB(255, 215, 0)
+title.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+title.BorderSizePixel = 0
+title.Parent = background
+
+-- Character selection frame
+local charSelectFrame = Instance.new("Frame")
+charSelectFrame.Visible = false
+charSelectFrame.Size = UDim2.new(0, 700, 0, 400)
+charSelectFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
+charSelectFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+charSelectFrame.BorderSizePixel = 0
+charSelectFrame.Parent = background
+
+-- Weapon selection frame
+local weaponSelectFrame = Instance.new("Frame")
+weaponSelectFrame.Visible = false
+weaponSelectFrame.Size = UDim2.new(0, 700, 0, 400)
+weaponSelectFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
+weaponSelectFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+weaponSelectFrame.BorderSizePixel = 0
+weaponSelectFrame.Parent = background
+
+-- Game settings frame
+local settingsFrame = Instance.new("Frame")
+settingsFrame.Visible = false
+settingsFrame.Size = UDim2.new(0, 700, 0, 400)
+settingsFrame.Position = UDim2.new(0.5, -350, 0.5, -200)
+settingsFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+settingsFrame.BorderSizePixel = 0
+settingsFrame.Parent = background
+
+-- Character buttons (example)
+local charButtons = {}
+local weapons = {"AK-47", "M4A1", "AWP", "Glock"}
+local characters = {"Elite", "Assassin", "Marksman", "Recon"}
+
+for i, char in ipairs(characters) do
+    local button = Instance.new("TextButton")
+    button.Text = char
+    button.Size = UDim2.new(0, 120, 0, 50)
+    button.Position = UDim2.new(0, (i-1)*130, 0.3, 0)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 18
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.MouseButton1Click:Connect(function()
+        print("Selected character:", char)
+        -- Apply character selection
+        charSelectFrame.Visible = false
+        weaponSelectFrame.Visible = true
+    end)
+    button.Parent = charSelectFrame
+    table.insert(charButtons, button)
+end
+
+-- Weapon buttons
+for i, weapon in ipairs(weapons) do
+    local button = Instance.new("TextButton")
+    button.Text = weapon
+    button.Size = UDim2.new(0, 120, 0, 50)
+    button.Position = UDim2.new(0, (i-1)*130, 0.3, 0)
+    button.Font = Enum.Font.SourceSansBold
+    button.TextSize = 18
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.MouseButton1Click:Connect(function()
+        print("Selected weapon:", weapon)
+        -- Apply weapon selection
+        weaponSelectFrame.Visible = false
+        settingsFrame.Visible = true
+    end)
+    button.Parent = weaponSelectFrame
+end
+
+-- Settings controls
+local difficulty = Instance.new("TextLabel")
+difficulty.Text = "Difficulty:"
+difficulty.Size = UDim2.new(0, 150, 0, 30)
+difficulty.Position = UDim2.new(0.2, 0, 0.2, 0)
+difficulty.Font = Enum.Font.SourceSansBold
+difficulty.TextSize = 20
+difficulty.TextColor3 = Color3.fromRGB(255, 255, 255)
+difficulty.Parent = settingsFrame
+
+local diffSlider = Instance.new("Slider")
+diffSlider.Size = UDim2.new(0, 200, 0, 20)
+diffSlider.Position = UDim2.new(0.5, 0, 0.2, 0)
+diffSlider.Value = 50
+diffSlider.Parent = settingsFrame
+
+local startBtn = Instance.new("TextButton")
+startBtn.Text = "START GAME"
+startBtn.Size = UDim2.new(0, 200, 0, 50)
+startBtn.Position = UDim2.new(0.5, -100, 0.7, 0)
+startBtn.Font = Enum.Font.SourceSansBold
+startBtn.TextSize = 24
+startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+startBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+startBtn.MouseButton1Click:Connect(function()
+    print("Starting game with difficulty:", math.floor(diffSlider.Value))
+    -- Start the actual game
+    settingsFrame.Visible = false
+    -- Hide main menu
+    mainMenu.Visible = false
+end)
+startBtn.Parent = settingsFrame
+
+-- Back buttons
+local backBtns = {}
+for _, frame in ipairs({charSelectFrame, weaponSelectFrame, settingsFrame}) do
+    local btn = Instance.new("TextButton")
+    btn.Text = "BACK"
+    btn.Size = UDim2.new(0, 100, 0, 40)
+    btn.Position = UDim2.new(0, 10, 0, 10)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 18
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    btn.MouseButton1Click:Connect(function()
+        if frame == charSelectFrame then
+            background.Visible = true
+            charSelectFrame.Visible = false
+        elseif frame == weaponSelectFrame then
+            charSelectFrame.Visible = true
+            weaponSelectFrame.Visible = false
+        elseif frame == settingsFrame then
+            weaponSelectFrame.Visible = true
+            settingsFrame.Visible = false
+        end
+    end)
+    btn.Parent = frame
+    table.insert(backBtns, btn)
+end
+
+-- Initial visibility
+background.Visible = true
+charSelectFrame.Visible = false
+weaponSelectFrame.Visible = false
+settingsFrame.Visible = false
+
+-- Add a way to open the menu from the game world
+game.Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(char)
+        local playerGui = player:WaitForChild("PlayerGui")
+        local menu = mainMenu:Clone()
+        menu.Parent = playerGui
+        menu.Visible = true
+        
+        -- Handle menu closing
+        local closeBtn = Instance.new("TextButton")
+        closeBtn.Text = "CLOSE MENU"
+        closeBtn.Size = UDim2.new(0, 150, 0, 40)
+        closeBtn.Position = UDim2.new(0.5, -75, 0.9, 0)
+        closeBtn.Font = Enum.Font.SourceSansBold
+        closeBtn.TextSize = 18
+        closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        closeBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        closeBtn.MouseButton1Click:Connect(function()
+            menu.Visible = false
         end)
-        btn.Parent = panel
-    end
-    
-    -- Botões de controle
-    local historyBtn = Instance.new("TextButton")
-    historyBtn.Text = "Histórico"
-    historyBtn.Size = UDim2.new(0, 80, 0, 25)
-    historyBtn.Position = UDim2.new(0, 10, 0, 210)
-    historyBtn.BackgroundTransparency = 0.4
-    historyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-    historyBtn.MouseButton1Click:Connect(function()
-        showHistory()
+        closeBtn.Parent = menu
     end)
-    historyBtn.Parent = panel
-    
-    local clearBtn = Instance.new("TextButton")
-    clearBtn.Text = "Limpar"
-    clearBtn.Size = UDim2.new(0, 80, 0, 25)
-    clearBtn.Position = UDim2.new(0, 95, 0, 210)
-    clearBtn.BackgroundTransparency = 0.4
-    clearBtn.TextColor3 = Color3.fromRGB(200, 150, 100)
-    clearBtn.MouseButton1Click:Connect(function()
-        clearHistory()
-    end)
-    clearBtn.Parent = panel
-    
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Text = "Fechar"
-    closeBtn.Size = UDim2.new(0, 80, 0, 25)
-    closeBtn.Position = UDim2.new(0, 180, 0, 210)
-    closeBtn.BackgroundTransparency = 0.4
-    closeBtn.TextColor3 = Color3.fromRGB(200, 100, 100)
-    closeBtn.MouseButton1Click:Connect(function()
-        menuFrame:Destroy()
-        menuFrame = nil
-    end)
-    closeBtn.Parent = panel
-    
-    return panel
-end
-
--- Função para teleportar para local
-local function teleportToLocation(position, name)
-    local currentTime = tick()
-    if currentTime - lastTeleportTime < teleportCooldown then
-        print("Aguarde " .. math.ceil(teleportCooldown - (currentTime - lastTeleportTime)) .. " segundos")
-        return
-    end
-    
-    if not player or not player.Character then return end
-    
-    local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
-    if not root then return end
-    
-    -- Verifica se a posição está dentro do mapa
-    local center = Vector3.new(0, 0, 0)
-    local distance = (position - center).Magnitude
-    
-    if distance > maxDistance then
-        print("Posição fora do mapa! Teleportando para posição segura.")
-        position = Vector3.new(0, 100, 0)
-    end
-    
-    -- Raycast para encontrar o chão
-    local ray = Ray.new(position, Vector3.new(0, -100, 0))
-    local hit, pos = workspace:FindPartOnRay(ray, player.Character)
-    
-    if hit then
-        -- Verifica se o ponto está acima do chão
-        if pos.Y > position.Y then
-            pos = Vector3.new(pos.X, position.Y + 10, pos.Z)
-        end
-        
-        root.CFrame = CFrame.new(pos)
-        lastTeleportTime = currentTime
-        addToHistory(name, pos)
-        print("Teleportado para:", name)
-    else
-        -- Se não encontrou chão, tenta encontrar um bloco próximo
-        local searchRadius = 50
-        for x = -searchRadius, searchRadius, 10 do
-            for z = -searchRadius, searchRadius, 10 do
-                local testPos = Vector3.new(position.X + x, position.Y, position.Z + z)
-                local rayTest = Ray.new(testPos, Vector3.new(0, -100, 0))
-                local hitTest, posTest = workspace:FindPartOnRay(rayTest, player.Character)
-                
-                if hitTest then
-                    pos = Vector3.new(posTest.X, position.Y + 10, posTest.Z)
-                    root.CFrame = CFrame.new(pos)
-                    lastTeleportTime = currentTime
-                    addToHistory(name, pos)
-                    print("Teleportado para:", name)
-                    return
-                end
-            end
-        end
-        
-        -- Se não encontrou nada, usa posição original com Y+10
-        pos = Vector3.new(position.X, position.Y + 10, position.Z)
-        root.CFrame = CFrame.new(pos)
-        lastTeleportTime = currentTime
-        addToHistory(name, pos)
-        print("Teleportado para posição original com ajuste:", name)
-    end
-end
-
--- Função para adicionar ao histórico
-local function addToHistory(name, position)
-    table.insert(locationHistory, 1, {name = name, position = position})
-    if #locationHistory > 10 then
-        table.remove(locationHistory, #locationHistory)
-    end
-end
-
--- Função para mostrar histórico
-local function showHistory()
-    if #locationHistory == 0 then
-        print("Histórico vazio")
-        return
-    end
-    
-    print("\n=== Histórico de Teleportações ===")
-    for i, entry in ipairs(locationHistory) do
-        print(i .. ". " .. entry.name .. " (" .. tostring(entry.position) .. ")")
-    end
-    print("=============================\n")
-end
-
--- Função para limpar histórico
-local function clearHistory()
-    locationHistory = {}
-    print("Histórico limpo")
-end
-
--- Função para alternar o menu
-local function toggleMenu()
-    if not menuFrame then
-        createMenu()
-    end
-    
-    menuVisible = not menuVisible
-    menuFrame:FindFirstChild("Panel").Visible = menuVisible
-end
-
--- Evento de tecla para alternar menu
-mouse.KeyDown:Connect(function(key)
-    if key == "m" then
-        toggleMenu()
-    end
 end)
 
-print("Menu de teletransporte carregado - Pressione 'M' para abrir menu")
+print("Sniper Arena menu loaded successfully!")
