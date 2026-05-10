@@ -5,6 +5,7 @@ local mouse = player:GetMouse()
 -- Configurações do menu
 local menuVisible = false
 local menuFrame = nil
+local maxDistance = 1000 -- Distância máxima permitida do mapa
 
 -- Função para criar o menu
 local function createMenu()
@@ -100,12 +101,27 @@ local function toggleMenu()
     menuFrame:FindFirstChild("Panel").Visible = menuVisible
 end
 
+-- Função para verificar se a posição está dentro do mapa
+local function isValidPosition(position)
+    -- Verifica distância do centro do mapa
+    local center = Vector3.new(0, 0, 0)
+    local distance = (position - center).Magnitude
+    
+    return distance <= maxDistance
+end
+
 -- Função para teleportar para posição válida
 local function teleportToValidPosition(position)
     if not player or not player.Character then return end
     
     local root = player.Character:FindFirstChild("HumanoidRootPart") or player.Character:FindFirstChild("Head")
     if not root then return end
+    
+    -- Verifica se a posição está dentro do mapa
+    if not isValidPosition(position) then
+        print("Posição fora do mapa! Teleportando para posição segura.")
+        position = Vector3.new(0, 100, 0) -- Posição segura padrão
+    end
     
     -- Raycast para encontrar o chão
     local ray = Ray.new(position, Vector3.new(0, -100, 0))
